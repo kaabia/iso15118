@@ -158,7 +158,7 @@ from iso15118.shared.security import (
     load_cert,
     load_priv_key,
 )
-from iso15118.shared.settings import V20_EVSE_SERVICES_CONFIG
+from iso15118.shared.settings import SharedSettings
 from iso15118.shared.states import State
 
 logger = logging.getLogger(__name__)
@@ -175,7 +175,9 @@ class V20ServiceParamMapping(BaseModel):
 # enum value of the energy transfer mode and value is the service parameter
 async def read_service_id_parameter_mappings():
     try:
-        async with async_open(V20_EVSE_SERVICES_CONFIG, "r") as v20_service_config:
+        async with async_open(
+            SharedSettings.v20_evse_service_config, "r"
+        ) as v20_service_config:
             try:
                 json_mapping = await v20_service_config.read()
                 v20_service_parameter_mapping = V20ServiceParamMapping.parse_raw(
@@ -185,11 +187,11 @@ async def read_service_id_parameter_mappings():
             except ValueError as exc:
                 raise ValueError(
                     f"Error reading 15118-20 service parameters settings file"
-                    f" at {V20_EVSE_SERVICES_CONFIG}"
+                    f" at {SharedSettings.v20_evse_service_config}"
                 ) from exc
     except (FileNotFoundError, IOError) as exc:
         raise FileNotFoundError(
-            f"V20 config not found at {V20_EVSE_SERVICES_CONFIG}"
+            f"V20 config not found at {SharedSettings.v20_evse_service_config}"
         ) from exc
 
 
