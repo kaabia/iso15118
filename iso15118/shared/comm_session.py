@@ -120,7 +120,7 @@ class SessionStateMachine(ABC):
     def get_exi_ns(
         self,
         payload_type: Union[DINPayloadTypes, ISOV2PayloadTypes, ISOV20PayloadTypes],
-    ) -> str:
+    ) -> Namespace:
         """
         Provides the right protocol namespace for the EXI decoder.
         In DIN SPEC 70121 and ISO 15118-2, all messages are defined
@@ -206,7 +206,7 @@ class SessionStateMachine(ABC):
                 logger.trace(  # type: ignore[attr-defined]
                     f"{self.comm_session.evse_id}:::"
                     f"{v2gtp_msg.payload.hex()}:::"
-                    f"{self.get_exi_ns(v2gtp_msg.payload_type)}"
+                    f"{self.get_exi_ns(v2gtp_msg.payload_type).value}"
                 )
 
         except V2GMessageValidationError as exc:
@@ -407,6 +407,9 @@ class V2GCommunicationSession(SessionStateMachine):
         if hasattr(self.comm_session, "evse_controller"):
             evse_controller = self.comm_session.evse_controller
             await evse_controller.update_data_link(terminate_or_pause)
+            await evse_controller.session_ended(str(self.current_state), reason)
+        elif hasattr(self.comm_session, "ev_controller"):
+            await self.comm_session.ev_controller.enable_charging(False)
         logger.info(f"{terminate_or_pause}d the data link")
         await asyncio.sleep(3)
         try:
@@ -512,6 +515,10 @@ class V2GCommunicationSession(SessionStateMachine):
                 FaultyStateImplementationError,
                 EXIDecodingError,
                 InvalidV2GTPMessageError,
+                AttributeError,
+                ValueError,
+                ConnectionResetError,
+                Exception,
             ) as exc:
                 message_name = ""
                 additional_info = ""
@@ -526,24 +533,10 @@ class V2GCommunicationSession(SessionStateMachine):
 
                 stop_reason = (
                     f"{exc.__class__.__name__} occurred while processing message "
-                    f"{message_name} in state {str(self.current_state)}"
-                    f":{additional_info}"
+                    f"{message_name} in state {str(self.current_state)} : {exc}. "
+                    f"{additional_info}"
                 )
 
-                self.stop_reason = StopNotification(
-                    False,
-                    stop_reason,
-                    self.peer_name,
-                )
-
-                await self.stop(stop_reason)
-                self.session_handler_queue.put_nowait(self.stop_reason)
-                return
-            except (AttributeError, ValueError) as exc:
-                stop_reason = (
-                    f"{exc.__class__.__name__} occurred while processing message in "
-                    f"state {str(self.current_state)}: {exc}"
-                )
                 self.stop_reason = StopNotification(
                     False,
                     stop_reason,

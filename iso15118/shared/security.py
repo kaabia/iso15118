@@ -80,7 +80,7 @@ from iso15118.shared.messages.xmldsig import (
     Transform,
     Transforms,
 )
-from iso15118.shared.settings import ENABLE_TLS_1_3, PKI_PATH
+from iso15118.shared.settings import SettingKey, shared_settings
 
 logger = logging.getLogger(__name__)
 
@@ -128,7 +128,7 @@ def get_ssl_context(server_side: bool) -> Optional[SSLContext]:
          as well as read the password.
     """
 
-    if ENABLE_TLS_1_3:
+    if shared_settings[SettingKey.ENABLE_TLS_1_3]:
         ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS)
     else:
         # Specifying protocol as `PROTOCOL_TLS` does best effort.
@@ -160,7 +160,7 @@ def get_ssl_context(server_side: bool) -> Optional[SSLContext]:
             logger.exception(exc)
             return None
 
-        if ENABLE_TLS_1_3:
+        if shared_settings[SettingKey.ENABLE_TLS_1_3]:
             # In 15118-20 we should also verify EVCC's certificate chain.
             # The spec however says TLS 1.3 should also support 15118-2
             # (Table 5 in V2G20 specification)
@@ -201,7 +201,7 @@ def get_ssl_context(server_side: bool) -> Optional[SSLContext]:
             "ECDHE-ECDSA-AES128-SHA256"
         )
 
-        if ENABLE_TLS_1_3:
+        if shared_settings[SettingKey.ENABLE_TLS_1_3]:
             try:
                 ssl_context.load_cert_chain(
                     certfile=CertPath.OEM_CERT_CHAIN_PEM,
@@ -484,13 +484,13 @@ def verify_certs(
 ):
     """
     Verifies a certificate chain according to the following criteria:
-    1. Verify the signature of each certificate contained in the cert chain
+    1. Check that the current date is within the time span provided by the
+       certificate's notBefore and notAfter attributes
+    2. Verify the signature of each certificate contained in the cert chain
        (throws CertSignatureError if not)
        1.a) Get the sub_ca_certs in order: leaf -> sub_ca_2 -> sub_ca_1 -> root
             (if two sub-CAs are in use, otherwise: leaf -> sub_ca_2 -> root)
        2.b) Do the actual signature verification from leaf to root
-    2. Check that the current date is within the time span provided by the
-       certificate's notBefore and notAfter attributes
     3. Checks that none of the certificates has been revoked.
 
     Args:
@@ -516,13 +516,29 @@ def verify_certs(
     leaf_cert = load_der_x509_certificate(leaf_cert_bytes)
     sub_ca2_cert = None
     sub_ca1_cert = None
-    root_ca_cert = load_der_x509_certificate(root_ca_cert_bytes)
+    root_ca_cert = None
+    if root_ca_cert_bytes:
+        root_ca_cert = load_der_x509_certificate(root_ca_cert_bytes)
 
     sub_ca_der_certs: List[Certificate] = [
         load_der_x509_certificate(cert) for cert in sub_ca_certs_bytes
     ]
 
-    # Step 1.a: Categorize the sub-CA certificates into sub-CA 1 and sub-CA 2.
+    # Step 1: Check that each certificate is valid, i.e. the current time is
+    #         between the notBefore and notAfter timestamps of the certificate
+    try:
+        certs_to_check: List[Certificate] = [leaf_cert]
+        if len(sub_ca_der_certs) != 0:
+            certs_to_check.extend(sub_ca_der_certs)
+        check_validity(certs_to_check)
+    except (CertNotYetValidError, CertExpiredError) as exc:
+        raise exc
+
+    if not root_ca_cert:
+        logger.info("Can't validate the chain as MO root is not present.")
+        return None
+
+    # Step 2.a: Categorize the sub-CA certificates into sub-CA 1 and sub-CA 2.
     #           A sub-CA 2 certificate's profile has its PathLength extension
     #           attribute set to 0, whereas a sub-CA 1 certificate's profile has
     #           its PathLength extension attribute set to 0.
@@ -577,7 +593,7 @@ def verify_certs(
     if (sub_ca2_cert or sub_ca1_cert) and private_environment:
         raise CertChainLengthError(allowed_num_sub_cas=0, num_sub_cas=1)
 
-    # Step 1.b: Now that we have established the right order of sub-CA
+    # Step 2.b: Now that we have established the right order of sub-CA
     #           certificates we can start verifying the signatures from leaf
     #           certificate to root CA certificate
     cert_to_check = leaf_cert
@@ -687,19 +703,6 @@ def verify_certs(
             f"{exc.__class__.__name__} while verifying signature"
             f"of certificate {cert_to_check.subject}"
         )
-
-    # Step 2: Check that each certificate is valid, i.e. the current time is
-    #         between the notBefore and notAfter timestamps of the certificate
-    try:
-        certs_to_check: List[Certificate] = [leaf_cert]
-        if sub_ca2_cert:
-            certs_to_check.append(sub_ca2_cert)
-        if sub_ca1_cert:
-            certs_to_check.append(sub_ca1_cert)
-        certs_to_check.append(root_ca_cert)
-        check_validity(certs_to_check)
-    except (CertNotYetValidError, CertExpiredError) as exc:
-        raise exc
 
     # Step 3: Check the OCSP (Online Certificate Status Protocol) response to
     #         see whether or not a certificate has been revoked
@@ -1449,34 +1452,39 @@ class CertPath(str, Enum):
     """
 
     # Mobility operator (MO)
-    CONTRACT_LEAF_DER = os.path.join(PKI_PATH, "iso15118_2/certs/contractLeafCert.der")
-    MO_SUB_CA2_DER = os.path.join(PKI_PATH, "iso15118_2/certs/moSubCA2Cert.der")
-    MO_SUB_CA1_DER = os.path.join(PKI_PATH, "iso15118_2/certs/moSubCA1Cert.der")
-    MO_ROOT_DER = os.path.join(PKI_PATH, "iso15118_2/certs/moRootCACert.der")
+    CONTRACT_LEAF_DER = "contractLeafCert.der"
+    MO_SUB_CA2_DER = "moSubCA2Cert.der"
+    MO_SUB_CA1_DER = "moSubCA1Cert.der"
+    MO_ROOT_DER = "moRootCACert.der"
 
     # Charge point operator (CPO)
-    SECC_LEAF_DER = os.path.join(PKI_PATH, "iso15118_2/certs/seccLeafCert.der")
-    SECC_LEAF_PEM = os.path.join(PKI_PATH, "iso15118_2/certs/seccLeafCert.pem")
-    CPO_SUB_CA2_DER = os.path.join(PKI_PATH, "iso15118_2/certs/cpoSubCA2Cert.der")
-    CPO_SUB_CA1_DER = os.path.join(PKI_PATH, "iso15118_2/certs/cpoSubCA1Cert.der")
-    V2G_ROOT_DER = os.path.join(PKI_PATH, "iso15118_2/certs/v2gRootCACert.der")
-    V2G_ROOT_PEM = os.path.join(PKI_PATH, "iso15118_2/certs/v2gRootCACert.pem")
+    SECC_LEAF_DER = "seccLeafCert.der"
+    SECC_LEAF_PEM = "seccLeafCert.pem"
+    CPO_SUB_CA2_DER = "cpoSubCA2Cert.der"
+    CPO_SUB_CA1_DER = "cpoSubCA1Cert.der"
+    V2G_ROOT_DER = "v2gRootCACert.der"
+    V2G_ROOT_PEM = "v2gRootCACert.pem"
     # Needed for the 'certfile' parameter in ssl_context.load_cert_chain()
-    CPO_CERT_CHAIN_PEM = os.path.join(PKI_PATH, "iso15118_2/certs/cpoCertChain.pem")
+    CPO_CERT_CHAIN_PEM = "cpoCertChain.pem"
 
     # Certificate provisioning service (CPS)
-    CPS_LEAF_DER = os.path.join(PKI_PATH, "iso15118_2/certs/cpsLeafCert.der")
-    CPS_SUB_CA2_DER = os.path.join(PKI_PATH, "iso15118_2/certs/cpsSubCA2Cert.der")
-    CPS_SUB_CA1_DER = os.path.join(PKI_PATH, "iso15118_2/certs/cpsSubCA1Cert.der")
+    CPS_LEAF_DER = "cpsLeafCert.der"
+    CPS_SUB_CA2_DER = "cpsSubCA2Cert.der"
+    CPS_SUB_CA1_DER = "cpsSubCA1Cert.der"
     # The root is the V2G_ROOT
 
     # EV manufacturer (OEM)
-    OEM_LEAF_DER = os.path.join(PKI_PATH, "iso15118_2/certs/oemLeafCert.der")
-    OEM_SUB_CA2_DER = os.path.join(PKI_PATH, "iso15118_2/certs/oemSubCA2Cert.der")
-    OEM_SUB_CA1_DER = os.path.join(PKI_PATH, "iso15118_2/certs/oemSubCA1Cert.der")
-    OEM_ROOT_DER = os.path.join(PKI_PATH, "iso15118_2/certs/oemRootCACert.der")
-    OEM_ROOT_PEM = os.path.join(PKI_PATH, "iso15118_2/certs/oemRootCACert.pem")
-    OEM_CERT_CHAIN_PEM = os.path.join(PKI_PATH, "iso15118_2/certs/oemCertChain.pem")
+    OEM_LEAF_DER = "oemLeafCert.der"
+    OEM_SUB_CA2_DER = "oemSubCA2Cert.der"
+    OEM_SUB_CA1_DER = "oemSubCA1Cert.der"
+    OEM_ROOT_DER = "oemRootCACert.der"
+    OEM_ROOT_PEM = "oemRootCACert.pem"
+    OEM_CERT_CHAIN_PEM = "oemCertChain.pem"
+
+    def __get__(self, instance, owner):
+        return os.path.join(
+            shared_settings[SettingKey.PKI_PATH], "iso15118_2/certs/", self.value
+        )
 
 
 class KeyPath(str, Enum):
@@ -1489,30 +1497,35 @@ class KeyPath(str, Enum):
     """
 
     # Mobility operator (MO)
-    CONTRACT_LEAF_PEM = os.path.join(
-        PKI_PATH, "iso15118_2/private_keys/contractLeaf" ".key"
-    )
-    MO_SUB_CA2_PEM = os.path.join(PKI_PATH, "iso15118_2/private_keys/moSubCA2.key")
-    MO_SUB_CA1_PEM = os.path.join(PKI_PATH, "iso15118_2/private_keys/moSubCA1.key")
-    MO_ROOT_PEM = os.path.join(PKI_PATH, "iso15118_2/private_keys/moRootCA.key")
+    CONTRACT_LEAF_PEM = "contractLeaf.key"
+    MO_SUB_CA2_PEM = "moSubCA2.key"
+    MO_SUB_CA1_PEM = "moSubCA1.key"
+    MO_ROOT_PEM = "moRootCA.key"
 
     # Charge point operator (CPO)
-    SECC_LEAF_PEM = os.path.join(PKI_PATH, "iso15118_2/private_keys/seccLeaf.key")
-    CPO_SUB_CA2_PEM = os.path.join(PKI_PATH, "iso15118_2/private_keys/cpoSubCA2.key")
-    CPO_SUB_CA1_PEM = os.path.join(PKI_PATH, "iso15118_2/private_keys/cpoSubCA1.key")
-    V2G_ROOT_PEM = os.path.join(PKI_PATH, "iso15118_2/private_keys/v2gRootCA.key")
+    SECC_LEAF_PEM = "seccLeaf.key"
+    CPO_SUB_CA2_PEM = "cpoSubCA2.key"
+    CPO_SUB_CA1_PEM = "cpoSubCA1.key"
+    V2G_ROOT_PEM = "v2gRootCA.key"
 
     # Certificate provisioning service (CPS)
-    CPS_LEAF_PEM = os.path.join(PKI_PATH, "iso15118_2/private_keys/cpsLeaf.key")
-    CPS_SUB_CA2_PEM = os.path.join(PKI_PATH, "iso15118_2/private_keys/cpsSubCA2.key")
-    CPS_SUB_CA1_PEM = os.path.join(PKI_PATH, "iso15118_2/private_keys/cpsSubCA1.key")
+    CPS_LEAF_PEM = "cpsLeaf.key"
+    CPS_SUB_CA2_PEM = "cpsSubCA2.key"
+    CPS_SUB_CA1_PEM = "cpsSubCA1.key"
     # The root is the V2G_ROOT
 
     # EV manufacturer (OEM)
-    OEM_LEAF_PEM = os.path.join(PKI_PATH, "iso15118_2/private_keys/oemLeaf.key")
-    OEM_SUB_CA2_PEM = os.path.join(PKI_PATH, "iso15118_2/private_keys/oemSubCA2.key")
-    OEM_SUB_CA1_PEM = os.path.join(PKI_PATH, "iso15118_2/private_keys/oemSubCA1.key")
-    OEM_ROOT_PEM = os.path.join(PKI_PATH, "iso15118_2/private_keys/oemRootCA.key")
+    OEM_LEAF_PEM = "oemLeaf.key"
+    OEM_SUB_CA2_PEM = "oemSubCA2.key"
+    OEM_SUB_CA1_PEM = "oemSubCA1.key"
+    OEM_ROOT_PEM = "oemRootCA.key"
+
+    def __get__(self, instance, owner):
+        return os.path.join(
+            shared_settings[SettingKey.PKI_PATH],
+            "iso15118_2/private_keys/",
+            self.value,
+        )
 
 
 class KeyPasswordPath(str, Enum):
@@ -1524,18 +1537,15 @@ class KeyPasswordPath(str, Enum):
     """
 
     # Private key password paths
-    SECC_LEAF_KEY_PASSWORD = os.path.join(
-        PKI_PATH, "iso15118_2/private_keys/seccLeafPassword.txt"
-    )
-    OEM_LEAF_KEY_PASSWORD = os.path.join(
-        PKI_PATH, "iso15118_2/private_keys/oemLeafPassword.txt"
-    )
-    CONTRACT_LEAF_KEY_PASSWORD = os.path.join(
-        PKI_PATH, "iso15118_2/private_keys/contractLeafPassword.txt"
-    )
-    CPS_LEAF_KEY_PASSWORD = os.path.join(
-        PKI_PATH, "iso15118_2/private_keys/cpsLeafPassword.txt"
-    )
-    MO_SUB_CA2_PASSWORD = os.path.join(
-        PKI_PATH, "iso15118_2/private_keys/moSubCA2LeafPassword.txt"
-    )
+    SECC_LEAF_KEY_PASSWORD = "seccLeafPassword.txt"
+    OEM_LEAF_KEY_PASSWORD = "oemLeafPassword.txt"
+    CONTRACT_LEAF_KEY_PASSWORD = "contractLeafPassword.txt"
+    CPS_LEAF_KEY_PASSWORD = "cpsLeafPassword.txt"
+    MO_SUB_CA2_PASSWORD = "moSubCA2LeafPassword.txt"
+
+    def __get__(self, instance, owner):
+        return os.path.join(
+            shared_settings[SettingKey.PKI_PATH],
+            "iso15118_2/private_keys/",
+            self.value,
+        )

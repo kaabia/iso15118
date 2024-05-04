@@ -854,6 +854,7 @@ class ScheduleExchange(StateEVCC):
                     else:
                         bpt_channel_selection = ChannelSelection.CHARGE
 
+            await self.comm_session.ev_controller.enable_charging(True)
             if self.comm_session.selected_charging_type_is_ac:
                 power_delivery_req = PowerDeliveryReq(
                     header=MessageHeader(
@@ -923,6 +924,7 @@ class PowerDelivery(StateEVCC):
             ChargingSession.SERVICE_RENEGOTIATION,
             ChargingSession.TERMINATE,
         ):
+            await self.comm_session.ev_controller.enable_charging(False)
             if self.comm_session.selected_energy_service.service in [
                 ServiceV20.DC,
                 ServiceV20.DC_BPT,
@@ -998,6 +1000,7 @@ class PowerDelivery(StateEVCC):
                     session_id=self.comm_session.session_id,
                     timestamp=time.time(),
                 ),
+                display_parameters=await self.comm_session.ev_controller.get_display_params(),  # noqa
                 scheduled_params=scheduled_params,
                 dynamic_params=dynamic_params,
                 bpt_scheduled_params=bpt_scheduled_params,
@@ -1038,6 +1041,7 @@ class PowerDelivery(StateEVCC):
                     session_id=self.comm_session.session_id,
                     timestamp=time.time(),
                 ),
+                display_parameters=await ev_controller.get_display_params(),
                 ev_present_voltage=await ev_controller.get_present_voltage(),
                 scheduled_params=scheduled_params,
                 dynamic_params=dynamic_params,
@@ -1084,15 +1088,15 @@ class PowerDelivery(StateEVCC):
 
         # Information from EV to show if charging or discharging is planned
         bpt_channel_selection = None
-        if self.comm_session.selected_energy_service in (
+        if self.comm_session.selected_energy_service.service in (
             ServiceV20.AC_BPT,
             ServiceV20.DC_BPT,
         ):
-            power_value = ev_power_profile.entry_list.entries.pop().power.value
-            if power_value < 0:
-                bpt_channel_selection = ChannelSelection.DISCHARGE
-            else:
-                bpt_channel_selection = ChannelSelection.CHARGE
+            bpt_channel_selection = ChannelSelection.CHARGE
+            if ev_power_profile is not None:
+                power_value = ev_power_profile.entry_list.entries[-1].power.value
+                if power_value < 0:
+                    bpt_channel_selection = ChannelSelection.DISCHARGE
 
         power_delivery_req = PowerDeliveryReq(
             header=MessageHeader(
@@ -1320,6 +1324,7 @@ class ACChargeLoop(StateEVCC):
                     session_id=self.comm_session.session_id,
                     timestamp=time.time(),
                 ),
+                display_parameters=await self.comm_session.ev_controller.get_display_params(),  # noqa
                 scheduled_params=scheduled_params,
                 dynamic_params=dynamic_params,
                 bpt_scheduled_params=bpt_scheduled_params,
@@ -1565,16 +1570,15 @@ class DCPreCharge(StateEVCC):
 
         # Information from EV to show if charging or discharging is planned
         bpt_channel_selection = None
-        if self.comm_session.selected_energy_service in (
+        if self.comm_session.selected_energy_service.service in (
             ServiceV20.AC_BPT,
             ServiceV20.DC_BPT,
         ):
-            power_value = ev_power_profile.entry_list.entries.pop().power.value
-            if power_value < 0:
-                bpt_channel_selection = ChannelSelection.DISCHARGE
-            else:
-                bpt_channel_selection = ChannelSelection.CHARGE
-
+            bpt_channel_selection = ChannelSelection.CHARGE
+            if ev_power_profile is not None:
+                power_value = ev_power_profile.entry_list.entries[-1].power.value
+                if power_value < 0:
+                    bpt_channel_selection = ChannelSelection.DISCHARGE
         power_delivery_req = PowerDeliveryReq(
             header=MessageHeader(
                 session_id=self.comm_session.session_id,
@@ -1694,6 +1698,7 @@ class DCChargeLoop(StateEVCC):
                 session_id=self.comm_session.session_id,
                 timestamp=time.time(),
             ),
+            display_parameters=await self.comm_session.ev_controller.get_display_params(),  # noqa
             ev_present_voltage=await self.comm_session.ev_controller.get_present_voltage(),  # noqa
             scheduled_params=scheduled_params,
             dynamic_params=dynamic_params,
