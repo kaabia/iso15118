@@ -2356,13 +2356,13 @@ class PreCharge(StateSECC):
             )
             return
 
-        if present_current_in_a > 2 or target_current_in_a > 2:
-            self.stop_state_machine(
-                "Target current or present current too high in state Precharge",
-                message,
-                ResponseCode.FAILED,
-            )
-            return
+        #if present_current_in_a > 2 or target_current_in_a > 2:
+        #    self.stop_state_machine(
+        #        "Target current or present current too high in state Precharge",
+        #        message,
+        #        ResponseCode.FAILED,
+        #    )
+        #    return
 
         # Set precharge voltage in every loop.
         # Because there are EVs that send a wrong Precharge-Voltage
