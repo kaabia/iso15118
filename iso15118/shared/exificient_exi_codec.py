@@ -3,6 +3,7 @@ import logging
 from builtins import Exception
 
 from iso15118.shared.iexi_codec import IEXICodec
+from iso15118.shared.ExiCodecMqttClient import ExiCodecMqttClient
 from iso15118.shared.settings import JAR_FILE_PATH
 
 logger = logging.getLogger(__name__)
@@ -16,16 +17,20 @@ def compare_messages(json_to_encode, decoded_json):
 
 class ExificientEXICodec(IEXICodec):
     def __init__(self):
-        from py4j.java_gateway import JavaGateway
+        # from py4j.java_gateway import JavaGateway
 
-        logging.getLogger("py4j").setLevel(logging.CRITICAL)
-        self.gateway = JavaGateway.launch_gateway(
-            classpath=JAR_FILE_PATH,
-            die_on_exit=True,
-            javaopts=["--add-opens", "java.base/java.lang=ALL-UNNAMED"],
-        )
+        # logging.getLogger("py4j").setLevel(logging.CRITICAL)
+        # self.gateway = JavaGateway.launch_gateway(
+        #     classpath=JAR_FILE_PATH,
+        #     die_on_exit=True,
+        #     javaopts=["--add-opens", "java.base/java.lang=ALL-UNNAMED"],
+        # )
 
-        self.exi_codec = self.gateway.jvm.com.siemens.ct.exi.main.cmd.EXICodec()
+        # self.exi_codec = self.gateway.jvm.com.siemens.ct.exi.main.cmd.EXICodec()
+
+        # Note : As this project uses poetry, paho-mqtt should be added
+        # poetry add paho-mqtt==2.1.0
+        self.exi_codec = ExiCodecMqttClient()
 
     def encode(self, message: str, namespace: str) -> bytes:
         """
