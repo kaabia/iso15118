@@ -824,8 +824,9 @@ class CertificateInstallation(StateSECC):
         )
         dh_public_key = DHPublicKey(id="id3", value=dh_pub_key)
         emaid = EMAID(
-            id="id4", value=get_cert_cn(load_cert(CertPath.CONTRACT_LEAF_DER))
+            id="id4", value="DE8AA1A2B3C4D59"
         )
+        #emaid=eMAID("DE8AA1A2B3C4D59"),
         cps_certificate_chain = CertificateChain(
             certificate=load_cert(CertPath.CPS_LEAF_DER),
             sub_certificates=SubCertificates(

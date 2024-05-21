@@ -462,7 +462,9 @@ class PaymentServiceSelection(StateEVCC):
             else:
                 try:
                     payment_details_req = PaymentDetailsReq(
-                        emaid=eMAID(get_cert_cn(load_cert(CertPath.CONTRACT_LEAF_DER))),
+                        #emaid=eMAID(get_cert_cn(load_cert(CertPath.CONTRACT_LEAF_DER))),
+                        #emaid=eMAID("DE-8AA-1A2B3C4D5-9"),
+                        emaid=eMAID("DE8AA1A2B3C4D59"),
                         cert_chain=load_cert_chain(
                             protocol=Protocol.ISO_15118_2,
                             leaf_path=CertPath.CONTRACT_LEAF_DER,
@@ -580,7 +582,8 @@ class CertificateInstallation(StateEVCC):
             return
 
         payment_details_req = PaymentDetailsReq(
-            emaid=get_cert_cn(load_cert(CertPath.CONTRACT_LEAF_DER)),
+            #emaid=get_cert_cn(load_cert(CertPath.CONTRACT_LEAF_DER)),
+            emaid=eMAID("DE8AA1A2B3C4D59"),
             cert_chain=load_cert_chain(
                 protocol=Protocol.ISO_15118_2,
                 leaf_path=CertPath.CONTRACT_LEAF_DER,
