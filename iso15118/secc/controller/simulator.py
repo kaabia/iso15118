@@ -236,6 +236,8 @@ def get_evse_context():
     evse_data_context.present_active_power_l3 = 10
     evse_data_context.current_regulation_tolerance = 10
     evse_data_context.energy_to_be_delivered = 10
+    #evse_data_context.present_current = 0
+    #evse_data_context.present_voltage = 351
     evse_data_context.present_current = 1
     evse_data_context.present_voltage = 1
     return evse_data_context
@@ -893,12 +895,15 @@ class SimEVSEController(EVSEControllerInterface):
 
     async def get_evse_max_voltage_limit(self) -> PVEVSEMaxVoltageLimit:
         return PVEVSEMaxVoltageLimit(multiplier=0, value=600, unit="V")
+        #return PVEVSEMaxVoltageLimit(multiplier=0, value=523, unit="V")
 
     async def get_evse_max_current_limit(self) -> PVEVSEMaxCurrentLimit:
         return PVEVSEMaxCurrentLimit(multiplier=0, value=300, unit="A")
+        #return PVEVSEMaxCurrentLimit(multiplier=0, value=234, unit="A")
 
     async def get_evse_max_power_limit(self) -> PVEVSEMaxPowerLimit:
         return PVEVSEMaxPowerLimit(multiplier=1, value=1000, unit="W")
+        #return PVEVSEMaxPowerLimit(multiplier=1, value=9000, unit="W")
 
     async def get_dc_charge_params_v20(
         self, energy_service: ServiceV20

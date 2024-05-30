@@ -412,6 +412,7 @@ class CommunicationSessionHandler:
 
         return create_sdp_response(
             sdp_request, ipv6_bytes, port, self.tcp_server.is_tls_enabled
+            #sdp_request, ipv6_bytes, 51111, self.tcp_server.is_tls_enabled
         )
 
     async def process_incoming_udp_packet(self, message: UDPPacketNotification):

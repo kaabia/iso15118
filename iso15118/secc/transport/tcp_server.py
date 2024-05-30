@@ -107,7 +107,9 @@ class TCPServer(asyncio.Protocol):
             # Bind the socket to the IP address and port for receiving
             # TCP packets
             try:
+                #print(self.full_ipv6_address)
                 sock.bind(self.full_ipv6_address)
+                #exit(0)
                 break
             except OSError as e:
                 # Once the max amount of retries has been reached, reraise the exception
