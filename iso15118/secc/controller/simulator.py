@@ -155,6 +155,7 @@ from iso15118.shared.security import (
     load_priv_key,
 )
 from iso15118.shared.states import State
+from iso15118.shared.messages.iso15118_2.body import ResponseCode as ResponseCodeV2
 
 logger = logging.getLogger(__name__)
 
@@ -253,8 +254,52 @@ class SimEVSEController(EVSEControllerInterface):
         self.ev_data_context = EVDataContext()
         self.evse_data_context = get_evse_context()
 
+        self.evse_response_code = ResponseCodeV2.OK
+        self.notification_max_delay =  0
+        self.evse_status_code = DCEVSEStatusCode.EVSE_READY
+
     def reset_ev_data_context(self):
         self.ev_data_context = EVDataContext()
+
+
+    def set_evse_response_code(self, responseCode: ResponseCodeV2):
+        self.evse_response_code = responseCode
+
+    def get_evse_response_code(self,):
+        return self.evse_response_code
+
+    def set_notification_max_delay(self, notification_max_delay: int):
+        self.notification_max_delay = notification_max_delay
+
+    def set_evse_status_code(self, evse_status_code: DCEVSEStatusCode):
+        self.evse_status_code = evse_status_code
+
+    def get_evse_status_code(self):
+        return self.evse_status_code
+
+    def set_evse_processing(self):
+        pass
+
+    def get_evse_processing(self):
+        pass
+
+    def set_evse_notification(self):
+        pass
+
+    def set_evse_max_power(self):
+        pass
+
+    def set_evse_min_power(self):
+        pass
+
+    def set_evse_max_voltage(self):
+        pass
+
+    def set_evse_target_voltage(self):
+        pass
+
+    def set_evse_target_current(self):
+        pass
 
     # ============================================================================
     # |             COMMON FUNCTIONS (FOR ALL ENERGY TRANSFER MODES)             |
@@ -833,9 +878,9 @@ class SimEVSEController(EVSEControllerInterface):
         """Overrides EVSEControllerInterface.get_dc_evse_status()."""
         return DCEVSEStatus(
             evse_notification=EVSENotificationV2.NONE,
-            notification_max_delay=0,
+            notification_max_delay=self.notification_max_delay,
             evse_isolation_status=IsolationLevel.VALID,
-            evse_status_code=DCEVSEStatusCode.EVSE_READY,
+            evse_status_code=self.evse_status_code #DCEVSEStatusCode.EVSE_READY,
         )
 
     async def get_dc_charge_parameters(self) -> DCEVSEChargeParameter:

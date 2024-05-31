@@ -6,6 +6,8 @@ from iso15118.secc.controller.interface import ServiceStatus
 from iso15118.secc.controller.simulator import SimEVSEController
 from iso15118.secc.secc_settings import Config
 from iso15118.shared.exificient_exi_codec import ExificientEXICodec
+from iso15118.secc.controller.evse_data_remote_node import evseDataRemoteNode
+from iso15118.shared.settings import load_shared_settings, shared_settings
 #from iso15118.secc.transport.tcp_server import TCPServer
 logger = logging.getLogger(__name__)
 
@@ -25,6 +27,8 @@ async def main():
     #await tcp_server.start_tls(server_ready_event)
 
     sim_evse_controller = SimEVSEController()
+    evseDataRNode = evseDataRemoteNode(config, sim_evse_controller)
+    shared_settings["evseDataRemoteNode"] = evseDataRNode
     await sim_evse_controller.set_status(ServiceStatus.STARTING)
     await SECCHandler(
         exi_codec=ExificientEXICodec(),

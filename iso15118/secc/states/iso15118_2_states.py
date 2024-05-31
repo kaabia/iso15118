@@ -9,6 +9,7 @@ import logging
 import time
 from typing import List, Optional, Tuple, Type, Union
 
+from iso15118.shared.settings import load_shared_settings, shared_settings
 from iso15118.secc.comm_session_handler import SECCCommunicationSession
 from iso15118.secc.controller.ev_data import EVSessionContext15118
 from iso15118.secc.controller.evse_data import CurrentType
@@ -203,6 +204,12 @@ class SessionSetup(StateSECC):
             self.comm_session.ev_session_context = EVSessionContext15118()
             self.comm_session.ev_session_context.session_id = session_id
 
+        # Some fields in current_demand_res could be forced by remote requests
+        # We should wait until we received process event or timeout of 10ms expires
+        evseDataRNode = shared_settings["evseDataRemoteNode"]
+        if True == evseDataRNode.wait_for_remote_scc_request(10):
+            self.response_code = self.comm_session.evse_controller.get_evse_response_code()
+
         session_setup_res = SessionSetupRes(
             response_code=self.response_code,
             evse_id=await self.comm_session.evse_controller.get_evse_id(
@@ -388,8 +395,13 @@ class ServiceDiscovery(StateSECC):
         if len(service_list) > 0:
             offered_services = ServiceList(services=service_list)
 
+        # Some fields in current_demand_res could be forced by remote requests
+        # We should wait until we received process event or timeout of 10ms expires
+        evseDataRNode = shared_settings["evseDataRemoteNode"]
+        evseDataRNode.wait_for_remote_scc_request(10)
+
         service_discovery_res = ServiceDiscoveryRes(
-            response_code=ResponseCode.OK,
+            response_code=self.comm_session.evse_controller.get_evse_response_code(),
             auth_option_list=AuthOptionList(auth_options=auth_options),
             charge_service=charge_service,
             service_list=offered_services,
@@ -494,8 +506,13 @@ class ServiceDetail(StateSECC):
             # point in time once we have an actual use case for that.
             pass
 
+        # Some fields in current_demand_res could be forced by remote requests
+        # We should wait until we received process event or timeout of 10ms expires
+        evseDataRNode = shared_settings["evseDataRemoteNode"]
+        evseDataRNode.wait_for_remote_scc_request(10)
+
         service_detail_res = ServiceDetailRes(
-            response_code=ResponseCode.OK,
+            response_code= self.comm_session.evse_controller.get_evse_response_code(),
             service_id=service_detail_req.service_id,
             service_parameter_list=ServiceParameterList(parameter_set=parameter_set),
         )
@@ -633,12 +650,17 @@ class PaymentServiceSelection(StateSECC):
             self.comm_session.selected_auth_option
         ]
 
+        # Some fields in current_demand_res could be forced by remote requests
+        # We should wait until we received process event or timeout of 10ms expires
+        evseDataRNode = shared_settings["evseDataRemoteNode"]
+        evseDataRNode.wait_for_remote_scc_request(10)
+
         # For now, we don't really care much more about the selected
         # value-added services. If the EVCC wants to do contract certificate
         # installation, it can do so as the service is offered.
 
         service_selection_res = PaymentServiceSelectionRes(
-            response_code=ResponseCode.OK
+            response_code=self.comm_session.evse_controller.get_evse_response_code()
         )
 
         self.create_next_message(
@@ -837,8 +859,13 @@ class CertificateInstallation(StateSECC):
             ),
         )
 
+        # Some fields in current_demand_res could be forced by remote requests
+        # We should wait until we received process event or timeout of 10ms expires
+        evseDataRNode = shared_settings["evseDataRemoteNode"]
+        evseDataRNode.wait_for_remote_scc_request(10)
+
         cert_install_res = CertificateInstallationRes(
-            response_code=ResponseCode.OK,
+            response_code=self.comm_session.evse_controller.get_evse_response_code(),
             cps_cert_chain=cps_certificate_chain,
             contract_cert_chain=contract_cert_chain,
             encrypted_private_key=encrypted_priv_key,
@@ -1268,8 +1295,13 @@ class Authorization(StateSECC):
             if self.comm_session.selected_auth_option == AuthEnum.EIM_V2:
                 auth_status = EVSEProcessing.ONGOING_WAITING_FOR_CUSTOMER
 
+        # Some fields in current_demand_res could be forced by remote requests
+        # We should wait until we received process event or timeout of 10ms expires
+        evseDataRNode = shared_settings["evseDataRemoteNode"]
+        evseDataRNode.wait_for_remote_scc_request(10)
         authorization_res = AuthorizationRes(
-            response_code=response_code, evse_processing=auth_status
+            response_code=self.comm_session.evse_controller.get_evse_response_code(),
+            evse_processing=auth_status
         )
 
         self.create_next_message(
@@ -1470,8 +1502,12 @@ class ChargeParameterDiscovery(StateSECC):
         else:
             self.expecting_charge_parameter_discovery_req = True
 
+        # Some fields in current_demand_res could be forced by remote requests
+        # We should wait until we received process event or timeout of 10ms expires
+        evseDataRNode = shared_settings["evseDataRemoteNode"]
+        evseDataRNode.wait_for_remote_scc_request(10)
         charge_params_res = ChargeParameterDiscoveryRes(
-            response_code=ResponseCode.OK,
+            response_code=self.comm_session.evse_controller.get_evse_response_code(),
             evse_processing=EVSEProcessing.FINISHED
             if sa_schedule_list
             else EVSEProcessing.ONGOING,
@@ -1760,8 +1796,12 @@ class PowerDelivery(StateSECC):
         else:
             dc_evse_status = await evse_controller.get_dc_evse_status()
 
+        # Some fields in current_demand_res could be forced by remote requests
+        # We should wait until we received process event or timeout of 10ms expires
+        evseDataRNode = shared_settings["evseDataRemoteNode"]
+        evseDataRNode.wait_for_remote_scc_request(10)
         power_delivery_res = PowerDeliveryRes(
-            response_code=ResponseCode.OK,
+            response_code=evse_controller.get_evse_response_code(),
             ac_evse_status=ac_evse_status,
             dc_evse_status=dc_evse_status,
         )
@@ -2463,8 +2503,14 @@ class CurrentDemand(StateSECC):
         # We don't care about signed meter values from the EVCC, but if you
         # do, then set receipt_required to True and set the field meter_info
         evse_controller = self.comm_session.evse_controller
+
+        # Some fields in current_demand_res could be forced by remote requests
+        # We should wait until we received process event or timeout of 10ms expires
+        evseDataRNode = shared_settings["evseDataRemoteNode"]
+        evseDataRNode.wait_for_remote_scc_request(10)
+
         current_demand_res = CurrentDemandRes(
-            response_code=ResponseCode.OK,
+            response_code=evse_controller.get_evse_response_code(),
             dc_evse_status=await evse_controller.get_dc_evse_status(),
             evse_present_voltage=await evse_controller.get_evse_present_voltage(
                 Protocol.ISO_15118_2
@@ -2557,8 +2603,13 @@ class WeldingDetection(StateSECC):
             await SessionStop(self.comm_session).process_message(message, message_exi)
             return
 
+        # Some fields in current_demand_res could be forced by remote requests
+        # We should wait until we received process event or timeout of 10ms expires
+        evseDataRNode = shared_settings["evseDataRemoteNode"]
+        evseDataRNode.wait_for_remote_scc_request(10)
+
         welding_detection_res = WeldingDetectionRes(
-            response_code=ResponseCode.OK,
+            response_code=self.comm_session.evse_controller.get_evse_response_code(),
             dc_evse_status=await self.comm_session.evse_controller.get_dc_evse_status(),
             evse_present_voltage=(
                 await self.comm_session.evse_controller.get_evse_present_voltage(
