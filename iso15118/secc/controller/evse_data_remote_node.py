@@ -1,11 +1,28 @@
 
 import paho.mqtt.client as mqtt
 from queue import Queue, Empty
+import logging
 
 from iso15118.secc.controller.simulator import SimEVSEController
 from iso15118.secc.secc_settings import Config
+from iso15118.shared.messages.iso15118_2.body import ResponseCode as ResponseCodeV2
+from iso15118.shared.messages.datatypes import (
+    DCEVSEChargeParameter,
+    DCEVSEStatus,
+    DCEVSEStatusCode)
+from iso15118.shared.messages.enums import (
+    AuthEnum,
+    AuthorizationStatus,
+    AuthorizationTokenType,
+    CpState,
+    DCEVErrorCode,
+    EVSEProcessing,
+    IsolationLevel,
+    Namespace,
+    Protocol,
+    SessionStopAction,
+)
 
-import logging
 logger = logging.getLogger(__name__)
 
 MQTT_TOPIC_SIMEVSE_IND_PREFIX =  "SimEVSE/ind/"
@@ -58,45 +75,27 @@ class evseDataRemoteNode:
             dict: A dictionary containing the message payload.
         """
         if str(message.topic).find("/ResponseCode") > 0:
-            logger.debug("Request received : SECC_SET => ResponseCode")
-            self.evse_controller.set_evse_response_code(message.payload)
-
+            self.evse_controller.set_evse_response_code(self, ResponseCodeV2(message.payload.decode("utf-8")))
         elif str(message.topic).find("/ForceStatusCode") > 0:
-            logger.debug("Request received : SECC_SET => ForceStatusCode")
-            self.evse_controller.set_evse_status_code(message.payload)
-
+            self.evse_controller.set_evse_status_code(self, DCEVSEStatusCode(message.payload.decode("utf-8")))
         elif str(message.topic).find("/NotificationMaxDelay") > 0:
-            logger.debug("Request received : SECC_SET => NotificationMaxDelay")
-            self.evse_controller.set_notification_max_delay(message.payload)
-
+            self.evse_controller.set_notification_max_delay(self, int(message.payload.decode("utf-8")))
         elif str(message.topic).find("/EVSEProcessing") > 0:
-            logger.debug("Request received : SECC_SET => EVSEProcessing")
-            self.evse_controller.set_evse_processing(message.payload)
-
-        elif str(message.topic).find("/EVSENotification") > 0:
-            logger.debug("Request received : SECC_SET => EVSENotification")
-            self.evse_controller.set_evse_notification(message.payload)
-
-        elif str(message.topic).find("/MaxPower") > 0:
-            logger.debug("Request received : SECC_SET => MaxPower")
-            self.evse_controller.set_evse_max_power(message.payload)
-
-        elif str(message.topic).find("/MinCurrent") > 0:
-            logger.debug("Request received : SECC_SET => MinCurrent")
-            self.evse_controller.set_evse_min_power(message.payload)
-
+            self.evse_controller.set_evse_processing(self, EVSEProcessing(message.payload.decode("utf-8")))
+        # NOT YET TESTED 
+        elif str(message.topic).find("/EVSENotification") > 0:            
+            self.evse_controller.set_evse_notification(self, message.payload.decode("utf-8"))
+        elif str(message.topic).find("/MaxPower") > 0:            
+            self.evse_controller.set_evse_max_power_limit(self, message.payload.decode("utf-8"))
+        elif str(message.topic).find("/MaxCurrent") > 0:
+            self.evse_controller.set_evse_max_current_limit(self, message.payload.decode("utf-8"))
         elif str(message.topic).find("/MaxVoltage") > 0:
-            logger.debug("Request received : SECC_SET => MaxVoltage")
-            self.evse_controller.set_evse_max_voltage(message.payload)
-
+            self.evse_controller.set_evse_max_voltage_limit(self, message.payload.decode("utf-8"))
         elif str(message.topic).find("/TargetVoltage") > 0:
-            logger.debug("Request received : SECC_SET => TargetVoltage")
-            self.evse_controller.set_evse_target_voltage(message.payload)
-
+            self.evse_controller.set_evse_target_voltage(self, message.payload.decode("utf-8"))
         elif str(message.topic).find("/TargetCurrent") > 0:
-            logger.debug("Request received : SECC_SET => TargetCurrent")
-            self.evse_controller.set_evse_target_current(message.payload)
-
+            self.evse_controller.set_evse_target_current(self, message.payload.decode("utf-8"))
+        # TESTED OK
         elif str(message.topic).find("/SCC_RequestDone") > 0:
             self.events_secc_release.put(message.payload)
 

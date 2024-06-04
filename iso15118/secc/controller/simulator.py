@@ -154,6 +154,21 @@ from iso15118.shared.security import (
     load_cert,
     load_priv_key,
 )
+
+from iso15118.shared.messages.enums import (
+    AuthEnum,
+    AuthorizationStatus,
+    AuthorizationTokenType,
+    CpState,
+    DCEVErrorCode,
+    EVSEProcessing,
+    IsolationLevel,
+    Namespace,
+    Protocol,
+    SessionStopAction,
+)
+from iso15118.secc.controller.evse_data import CurrentType, EVSEDataContext
+
 from iso15118.shared.states import State
 from iso15118.shared.messages.iso15118_2.body import ResponseCode as ResponseCodeV2
 
@@ -254,51 +269,70 @@ class SimEVSEController(EVSEControllerInterface):
         self.ev_data_context = EVDataContext()
         self.evse_data_context = get_evse_context()
 
-        self.evse_response_code = ResponseCodeV2.OK
-        self.notification_max_delay =  0
-        self.evse_status_code = DCEVSEStatusCode.EVSE_READY
+        self.evse_response_code: ResponseCodeV2 = ResponseCodeV2.OK
+        self.notification_max_delay: int = 0
+        self.evse_status_code: DCEVSEStatusCode = DCEVSEStatusCode.EVSE_READY
+        self.evse_processing: EVSEProcessing.FINISHED
+        self.evse_notification: EVSENotificationV2 = EVSENotificationV2.NONE
 
     def reset_ev_data_context(self):
         self.ev_data_context = EVDataContext()
 
-
     def set_evse_response_code(self, responseCode: ResponseCodeV2):
+        logger.debug(f"set_evse_response_code : responseCode = {responseCode}")
         self.evse_response_code = responseCode
 
     def get_evse_response_code(self,):
         return self.evse_response_code
 
     def set_notification_max_delay(self, notification_max_delay: int):
+        logger.debug(f"set_notification_max_delay : notification_max_delay = {notification_max_delay}")
         self.notification_max_delay = notification_max_delay
 
+    def get_notification_max_delay(self):
+        return self.notification_max_delay
+
     def set_evse_status_code(self, evse_status_code: DCEVSEStatusCode):
+        logger.debug(f"set_evse_status_code : evse_status_code = {evse_status_code}")
         self.evse_status_code = evse_status_code
 
     def get_evse_status_code(self):
         return self.evse_status_code
 
-    def set_evse_processing(self):
+    def set_evse_processing(self, evse_processing: EVSEProcessing):
+        logger.debug(f"set_evse_processing : evse_processing = {evse_processing}")
+        self.evse_processing = evse_processing
+
+    def get_evse_processing(self, value):
+        return self.evse_processing
+
+    def set_evse_notification(self, evse_notification:EVSENotificationV2):
+        logger.debug(f"set_evse_notification : evse_notification = {evse_notification}")
+        self.evse_notification = evse_notification
+
+    def set_evse_max_power_limit(self, power_limit):
+        session_limits = self.evse_data_context.session_limits
+        session_limits.dc_limits.max_charge_power = power_limit
+
+    def set_evse_max_current_limit(self, current_limit):
+        # This is currently being used by -2 only.
+        session_limits = self.evse_data_context.session_limits
+        if self.evse_data_context.current_type == CurrentType.AC:
+            pass #TODO
+        elif self.evse_data_context.current_type == CurrentType.DC:
+            session_limits.dc_limits.max_charge_current = current_limit
+
+    def set_evse_max_voltage_limit(self, voltage_limit):
+        session_limits = self.evse_data_context.session_limits
+        if self.evse_data_context.current_type == CurrentType.AC:
+            self.evse_data_context.nominal_voltage = voltage_limit
+        else:
+            session_limits.dc_limits.max_voltage = voltage_limit
+
+    def set_evse_target_voltage(self, value):
         pass
 
-    def get_evse_processing(self):
-        pass
-
-    def set_evse_notification(self):
-        pass
-
-    def set_evse_max_power(self):
-        pass
-
-    def set_evse_min_power(self):
-        pass
-
-    def set_evse_max_voltage(self):
-        pass
-
-    def set_evse_target_voltage(self):
-        pass
-
-    def set_evse_target_current(self):
+    def set_evse_target_current(self, value):
         pass
 
     # ============================================================================
@@ -814,8 +848,8 @@ class SimEVSEController(EVSEControllerInterface):
     async def get_ac_evse_status(self) -> ACEVSEStatus:
         """Overrides EVSEControllerInterface.get_ac_evse_status()."""
         return ACEVSEStatus(
-            notification_max_delay=0,
-            evse_notification=EVSENotificationV2.NONE,
+            notification_max_delay=self.notification_max_delay,
+            evse_notification=self.evse_notification,
             rcd=False,
         )
 
@@ -877,10 +911,10 @@ class SimEVSEController(EVSEControllerInterface):
     async def get_dc_evse_status(self) -> DCEVSEStatus:
         """Overrides EVSEControllerInterface.get_dc_evse_status()."""
         return DCEVSEStatus(
-            evse_notification=EVSENotificationV2.NONE,
+            evse_notification=self.evse_notification,
             notification_max_delay=self.notification_max_delay,
             evse_isolation_status=IsolationLevel.VALID,
-            evse_status_code=self.evse_status_code #DCEVSEStatusCode.EVSE_READY,
+            evse_status_code=self.evse_status_code,
         )
 
     async def get_dc_charge_parameters(self) -> DCEVSEChargeParameter:
@@ -888,9 +922,9 @@ class SimEVSEController(EVSEControllerInterface):
         return DCEVSEChargeParameter(
             dc_evse_status=DCEVSEStatus(
                 notification_max_delay=100,
-                evse_notification=EVSENotificationV2.NONE,
+                evse_notification=self.evse_notification,
                 evse_isolation_status=IsolationLevel.VALID,
-                evse_status_code=DCEVSEStatusCode.EVSE_READY,
+                evse_status_code=self.evse_status_code,
             ),
             evse_maximum_power_limit=PVEVSEMaxPowerLimit(
                 multiplier=1, value=230, unit="W"
