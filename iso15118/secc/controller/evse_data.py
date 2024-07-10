@@ -98,6 +98,7 @@ class EVSEDCCLLimits(Limits):
     max_charge_current: Optional[float] = None  # Required in 15118-20 Dynamic CL
     max_voltage: Optional[float] = None  # Required in 15118-20 Dynamic CL
     min_voltage: Optional[float] = None  # Required in 15118-20 Dynamic BPT CL
+    min_current: Optional[float] = None  # Required in 15118-20 Dynamic BPT CL
     # Optional and present in 15118-20 DC BPT CL (Scheduled)
     max_discharge_power: Optional[float] = None  # Req in 15118-20 Dynamic BPT CL
     min_discharge_power: Optional[float] = None  # Req in 15118-20 Dynamic BPT CL

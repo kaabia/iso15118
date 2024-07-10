@@ -155,6 +155,18 @@ from iso15118.shared.security import (
     load_priv_key,
 )
 
+from iso15118.shared.messages.datatypes import (
+    DCEVSEChargeParameter,
+    DCEVSEStatus,
+    PhysicalValue,
+    PVEVSEMaxCurrent,
+    PVEVSEMaxCurrentLimit,
+    PVEVSEMaxPowerLimit,
+    PVEVSEMaxVoltageLimit,
+    PVEVSEPresentCurrent,
+    PVEVSEPresentVoltage,
+)
+
 from iso15118.shared.messages.enums import (
     AuthEnum,
     AuthorizationStatus,
@@ -309,31 +321,6 @@ class SimEVSEController(EVSEControllerInterface):
     def set_evse_notification(self, evse_notification:EVSENotificationV2):
         logger.debug(f"set_evse_notification : evse_notification = {evse_notification}")
         self.evse_notification = evse_notification
-
-    def set_evse_max_power_limit(self, power_limit):
-        session_limits = self.evse_data_context.session_limits
-        session_limits.dc_limits.max_charge_power = power_limit
-
-    def set_evse_max_current_limit(self, current_limit):
-        # This is currently being used by -2 only.
-        session_limits = self.evse_data_context.session_limits
-        if self.evse_data_context.current_type == CurrentType.AC:
-            pass #TODO
-        elif self.evse_data_context.current_type == CurrentType.DC:
-            session_limits.dc_limits.max_charge_current = current_limit
-
-    def set_evse_max_voltage_limit(self, voltage_limit):
-        session_limits = self.evse_data_context.session_limits
-        if self.evse_data_context.current_type == CurrentType.AC:
-            self.evse_data_context.nominal_voltage = voltage_limit
-        else:
-            session_limits.dc_limits.max_voltage = voltage_limit
-
-    def set_evse_target_voltage(self, value):
-        pass
-
-    def set_evse_target_current(self, value):
-        pass
 
     # ============================================================================
     # |             COMMON FUNCTIONS (FOR ALL ENERGY TRANSFER MODES)             |
@@ -926,24 +913,12 @@ class SimEVSEController(EVSEControllerInterface):
                 evse_isolation_status=IsolationLevel.VALID,
                 evse_status_code=self.evse_status_code,
             ),
-            evse_maximum_power_limit=PVEVSEMaxPowerLimit(
-                multiplier=1, value=230, unit="W"
-            ),
-            evse_maximum_current_limit=PVEVSEMaxCurrentLimit(
-                multiplier=1, value=4, unit="A"
-            ),
-            evse_maximum_voltage_limit=PVEVSEMaxVoltageLimit(
-                multiplier=1, value=4, unit="V"
-            ),
-            evse_minimum_current_limit=PVEVSEMinCurrentLimit(
-                multiplier=1, value=2, unit="A"
-            ),
-            evse_minimum_voltage_limit=PVEVSEMinVoltageLimit(
-                multiplier=1, value=4, unit="V"
-            ),
-            evse_peak_current_ripple=PVEVSEPeakCurrentRipple(
-                multiplier=1, value=4, unit="A"
-            ),
+            evse_maximum_power_limit=await self.get_evse_max_power_limit(),
+            evse_maximum_current_limit=await self.get_evse_max_current_limit(),
+            evse_maximum_voltage_limit=await self.get_evse_max_voltage_limit(),
+            evse_minimum_current_limit=await self.get_evse_min_current_limit(),
+            evse_minimum_voltage_limit=await self.get_evse_min_voltage_limit(),
+            evse_peak_current_ripple=await self.evse_peak_current_ripple(),
         )
 
     async def start_cable_check(self):
@@ -973,16 +948,62 @@ class SimEVSEController(EVSEControllerInterface):
         return False
 
     async def get_evse_max_voltage_limit(self) -> PVEVSEMaxVoltageLimit:
-        return PVEVSEMaxVoltageLimit(multiplier=0, value=600, unit="V")
-        #return PVEVSEMaxVoltageLimit(multiplier=0, value=523, unit="V")
+        """
+        Gets the max voltage that can be provided by the charger
+
+        Relevant for:
+        - ISO 15118-2
+        """
+        session_limits = self.evse_data_context.session_limits
+        if self.evse_data_context.current_type == CurrentType.AC:
+            voltage_limit = self.evse_data_context.nominal_voltage
+        else:
+            voltage_limit = session_limits.dc_limits.max_voltage
+        exponent, value = PhysicalValue.get_exponent_value_repr(voltage_limit)
+        return PVEVSEMaxVoltageLimit(
+            multiplier=exponent,
+            value=value,
+            unit=UnitSymbol.VOLTAGE,
+        )
 
     async def get_evse_max_current_limit(self) -> PVEVSEMaxCurrentLimit:
-        return PVEVSEMaxCurrentLimit(multiplier=0, value=300, unit="A")
-        #return PVEVSEMaxCurrentLimit(multiplier=0, value=234, unit="A")
+        session_limits = self.evse_data_context.session_limits
+        current_limit = session_limits.dc_limits.max_charge_current
+        exponent, value = PhysicalValue.get_exponent_value_repr(current_limit)
+        return PVEVSEMaxCurrentLimit(
+            multiplier=exponent,
+            value=value,
+            unit=UnitSymbol.AMPERE,
+        )
 
-    async def get_evse_max_power_limit(self) -> PVEVSEMaxPowerLimit:
-        return PVEVSEMaxPowerLimit(multiplier=1, value=1000, unit="W")
-        #return PVEVSEMaxPowerLimit(multiplier=1, value=9000, unit="W")
+    async def get_evse_min_voltage_limit(self) -> PVEVSEMinVoltageLimit:
+        session_limits = self.evse_data_context.session_limits
+        current_limit = session_limits.dc_limits.min_voltage
+        exponent, value = PhysicalValue.get_exponent_value_repr(current_limit)
+        return PVEVSEMinVoltageLimit(
+            multiplier=exponent,
+            value=value,
+            unit=UnitSymbol.VOLTAGE,
+        )
+
+    async def get_evse_min_current_limit(self) -> PVEVSEMinCurrentLimit:
+        session_limits = self.evse_data_context.session_limits
+        current_limit = session_limits.dc_limits.min_current
+        exponent, value = PhysicalValue.get_exponent_value_repr(current_limit)
+        return PVEVSEMinCurrentLimit(
+            multiplier=exponent,
+            value=value,
+            unit=UnitSymbol.AMPERE,
+        )
+
+    async def evse_peak_current_ripple(self) -> PVEVSEPeakCurrentRipple:
+        current_ripple = self.evse_data_context.peak_current_ripple
+        exponent, value = PhysicalValue.get_exponent_value_repr(current_ripple)
+        return PVEVSEPeakCurrentRipple(
+            multiplier=exponent,
+            value=value,
+            unit=UnitSymbol.AMPERE,
+        )
 
     async def get_dc_charge_params_v20(
         self, energy_service: ServiceV20
