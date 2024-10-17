@@ -23,6 +23,9 @@ from iso15118.shared.messages.enums import (
     SessionStopAction,
 )
 
+from iso15118.shared.messages.datatypes import EVSENotification as EVSENotificationV2
+from iso15118.shared.settings import SettingKey, shared_settings
+
 logger = logging.getLogger(__name__)
 
 MQTT_TOPIC_SIMEVSE_IND_PREFIX =  "SimEVSE/ind/"
@@ -40,7 +43,7 @@ class evseDataRemoteNode:
         self.m_mqttc = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         self.events_secc_set = Queue()
         self.events_secc_release = Queue()
-        self.hostname = "127.0.0.1"
+        self.hostname = shared_settings[SettingKey.MQTT_HOST_NAME]
         self.port = 1883
         self.m_mqttc.on_connect = self.on_connect
         self.m_mqttc.on_message = self.on_message
@@ -84,7 +87,8 @@ class evseDataRemoteNode:
             self.evse_controller.set_evse_processing(self, EVSEProcessing(message.payload.decode("utf-8")))
         # NOT YET TESTED 
         elif str(message.topic).find("/EVSENotification") > 0:            
-            self.evse_controller.set_evse_notification(self, message.payload.decode("utf-8"))
+            #self.evse_controller.set_evse_notification(self, EVSENotificationV2(message.payload.decode("utf-8")))
+            self.evse_controller.evse_notification = EVSENotificationV2.RE_NEGOTIATION
         elif str(message.topic).find("/MaxPower") > 0:
             self.evse_controller.evse_data_context.session_limits.dc_limits.max_charge_power = float(message.payload.decode("utf-8"))
         elif str(message.topic).find("/MaxCurrent") > 0:

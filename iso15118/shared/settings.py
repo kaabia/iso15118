@@ -10,6 +10,7 @@ class SettingKey:
     MESSAGE_LOG_EXI = "MESSAGE_LOG_EXI"
     ENABLE_TLS_1_3 = "ENABLE_TLS_1_3"
     USE_JAVA_GATEWAY_EXICODEC = "USE_JAVA_GATEWAY_EXICODEC"
+    MQTT_HOST_NAME= "MQTT_HOST_NAME"
 
 
 shared_settings = {}
@@ -29,6 +30,7 @@ def load_shared_settings(env_path: Optional[str] = None):
         SettingKey.MESSAGE_LOG_EXI: env.bool("MESSAGE_LOG_EXI", default=False),
         SettingKey.ENABLE_TLS_1_3: env.bool("ENABLE_TLS_1_3", default=False),
         SettingKey.USE_JAVA_GATEWAY_EXICODEC: env.bool("USE_JAVA_GATEWAY_EXICODEC", default=False),
+        SettingKey.MQTT_HOST_NAME: env.str("MQTT_HOST_NAME", default="127.0.0.1"),
     }
     shared_settings.update(settings)
     env.seal()  # raise all errors at once, if any

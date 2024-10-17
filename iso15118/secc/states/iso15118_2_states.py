@@ -2534,9 +2534,8 @@ class CurrentDemand(StateSECC):
             #      whether or not a receipt is required and when
             #      (probably only makes sense at the beginning and end of
             #      a charging session). If true, set MeterInfo.
-            # meter_info=await self.comm_session.evse_controller.get_meter_info(
-            #     self.comm_session.protocol),
-            receipt_required=False,
+            meter_info=await self.comm_session.evse_controller.get_meter_info_v2(),
+            receipt_required=True,
         )
 
         if current_demand_res.meter_info:

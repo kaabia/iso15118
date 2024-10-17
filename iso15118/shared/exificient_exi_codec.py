@@ -33,7 +33,7 @@ class ExificientEXICodec(IEXICodec):
         else:
             # Note : As this project uses poetry, paho-mqtt should be added
             # poetry add paho-mqtt==2.1.0
-            self.exi_codec = ExiCodecMqttClient()
+            self.exi_codec = ExiCodecMqttClient(hostname=shared_settings[SettingKey.MQTT_HOST_NAME])
 
     def encode(self, message: str, namespace: str) -> bytes:
         """
